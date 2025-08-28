@@ -6,6 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
+import { 
+  Document, Packer, Paragraph, Table, TableRow, TableCell, 
+  TextRun, WidthType, ExternalHyperlink 
+} from "docx"
+import { saveAs } from "file-saver"
+
+
 
 // ✅ Match API response keys
 interface BookResult {
@@ -61,42 +68,133 @@ export default function ScraperUI() {
     }
   }
 
-// 📥 Download CSV
-const downloadCSV = () => {
+  // 📥 Download CSV
+  const downloadCSV = () => {
+    if (results.length === 0) return
+
+    const headers = ["Year", "Author(s)/Contributors", "Title", "URL"]
+    const csvRows = [
+      headers,
+      ...results.map((book) => [
+        book.Year,
+        book["Author(s)/Contributors"],
+        book.Title,
+        book.URL,
+      ]),
+    ]
+
+    const csvContent = csvRows
+      .map((row) => row.map((val) => `"${val}"`).join(","))
+      .join("\n")
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const subjectSafe = searchParams.subject
+      .trim()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-zA-Z0-9_]/g, "")
+    const fileName = `${subjectSafe || "books"}_${searchParams.startYear}-${searchParams.endYear}.csv`
+
+    saveAs(blob, fileName)
+  }
+
+// 📥 Download Word (DOCX)
+const downloadWord = async () => {
   if (results.length === 0) return
 
-  const headers = ["Year", "Author(s)/Contributors", "Title", "URL"]
-  const csvRows = [
-    headers,
-    ...results.map((book) => [
-      book.Year,
-      book["Author(s)/Contributors"],
-      book.Title,
-      book.URL,
-    ]),
-  ]
-
-  const csvContent = csvRows
-    .map((row) => row.map((val) => `"${val}"`).join(","))
-    .join("\n")
-
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-  const link = document.createElement("a")
-  link.href = URL.createObjectURL(blob)
-
-  // ✅ Use subject + year range in filename
   const subjectSafe = searchParams.subject
     .trim()
     .replace(/\s+/g, "_")
     .replace(/[^a-zA-Z0-9_]/g, "")
-  link.download = `${subjectSafe || "books"}_${searchParams.startYear}-${searchParams.endYear}.csv`
+  const fileName = `${subjectSafe || "books"}_${searchParams.startYear}-${searchParams.endYear}.docx`
 
-  link.click()
+  // Page width in Word ≈ 11900 DXA (8.27" A4) minus ~1800 DXA margins
+  // So usable width ≈ 10000 DXA
+  const tableWidth = 10000
+
+  // Distribute relative widths (must add up to 100%)
+  const colPercents = [10, 25, 45, 20] // Year 10%, Authors 25%, Title 45%, URL 20
+  const colWidths = colPercents.map(p => Math.floor((p / 100) * tableWidth))
+
+  const headers = ["Year", "Author(s)/Contributors", "Title", "URL"]
+
+  // ✅ Header row
+  const headerRow = new TableRow({
+    children: headers.map((header, i) =>
+      new TableCell({
+        children: [
+          new Paragraph({
+            children: [new TextRun({ text: header, bold: true })],
+          }),
+        ],
+        width: { size: colWidths[i], type: WidthType.DXA },
+      })
+    ),
+  })
+
+  // ✅ Data rows
+  const dataRows = results.map(
+    (book) =>
+      new TableRow({
+        children: [
+          { val: book.Year, width: colWidths[0] },
+          { val: book["Author(s)/Contributors"], width: colWidths[1] },
+          { val: book.Title, width: colWidths[2] },
+          { val: book.URL, width: colWidths[3], isLink: true },
+        ].map((col) => {
+          if (col.isLink && col.val) {
+            return new TableCell({
+              children: [
+                new Paragraph({
+                  children: [
+                    new ExternalHyperlink({
+                      link: col.val,
+                      children: [
+                        new TextRun({
+                          text: "View Book",
+                          style: "Hyperlink",
+                        }),
+                      ],
+                    }),
+                  ],
+                }),
+              ],
+              width: { size: col.width, type: WidthType.DXA },
+            })
+          }
+
+          return new TableCell({
+            children: [new Paragraph({ text: col.val || "" })],
+            width: { size: col.width, type: WidthType.DXA },
+          })
+        }),
+      })
+  )
+
+  const doc = new Document({
+    sections: [
+      {
+        children: [
+          new Paragraph({
+            text: `Book Results for "${searchParams.subject}" (${searchParams.startYear}-${searchParams.endYear})`,
+            heading: "Heading1",
+          }),
+          new Paragraph({ text: " " }),
+          new Table({
+            width: { size: tableWidth, type: WidthType.DXA }, // make full page width
+            rows: [headerRow, ...dataRows],
+          }),
+        ],
+      },
+    ],
+  })
+
+  const blob = await Packer.toBlob(doc)
+  saveAs(blob, fileName)
 }
-
 
   return (
     <div className="container mx-auto p-6">
+      {/* Search Form */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -109,7 +207,6 @@ const downloadCSV = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Search Form */}
             <form onSubmit={handleSubmit} className="grid gap-4">
               <Input
                 name="subject"
@@ -226,9 +323,12 @@ const downloadCSV = () => {
                   ))}
                 </tbody>
               </table>
-              <div className="p-4">
-                <Button onClick={downloadCSV} className="w-full">
+              <div className="p-4 flex gap-2">
+                <Button onClick={downloadCSV} className="w-1/2">
                   Download CSV
+                </Button>
+                <Button onClick={downloadWord} className="w-1/2">
+                  Download Word
                 </Button>
               </div>
             </div>
