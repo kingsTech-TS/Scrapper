@@ -34,31 +34,32 @@ export default function ScraperUI() {
   }
 
   // 🚀 Handle search submit
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setHasSearched(true)
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setIsLoading(true)
+  setHasSearched(true)
 
-    try {
-      const response = await fetch(
-        `http://127.0.0.1:8000/scrape?query=${encodeURIComponent(
-          searchParams.subject
-        )}&start_year=${searchParams.startYear}&end_year=${searchParams.endYear}&limit=${searchParams.globalLimit}`
-      )
+  try {
+    const response = await fetch(
+      `https://doab-scrapper-api.onrender.com/scrape?query=${encodeURIComponent(
+        searchParams.subject
+      )}&start_year=${searchParams.startYear}&end_year=${searchParams.endYear}&limit=${searchParams.globalLimit}`
+    )
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch data")
-      }
-
-      const data = await response.json()
-      setResults(data.books || [])
-    } catch (error) {
-      console.error("Error fetching data:", error)
-      setResults([])
-    } finally {
-      setIsLoading(false)
+    if (!response.ok) {
+      throw new Error("Failed to fetch data")
     }
+
+    const data = await response.json()
+    setResults(data.books || [])
+  } catch (error) {
+    console.error("Error fetching data:", error)
+    setResults([])
+  } finally {
+    setIsLoading(false)
   }
+}
+
 
   // 📥 Download CSV
   const downloadCSV = () => {
