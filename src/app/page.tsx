@@ -25,67 +25,75 @@ export default function ScraperUI() {
   const [results, setResults] = useState<BookResult[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
+  const [errorMsg, setErrorMsg] = useState("")
 
   // 🔍 Handle input changes
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchParams({ ...searchParams, [e.target.name]: e.target.value })
   }
 
   // 🚀 Handle search submit
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault()
-  setIsLoading(true)
-  setHasSearched(true)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setHasSearched(true)
 
-  try {
-    const response = await fetch(
-      `https://doab-scrapper-api.onrender.com/scrape?query=${encodeURIComponent(
-        searchParams.subject
-      )}&start_year=${searchParams.startYear}&end_year=${searchParams.endYear}&limit=${searchParams.globalLimit}`
-    )
+    try {
+      const response = await fetch(
+        `https://doab-scrapper-api.onrender.com/scrape?query=${encodeURIComponent(
+          searchParams.subject
+        )}&start_year=${searchParams.startYear}&end_year=${searchParams.endYear}&limit=${searchParams.globalLimit}`
+      )
 
-    if (!response.ok) {
-      throw new Error("Failed to fetch data")
+      if (!response.ok) {
+        throw new Error("Failed to fetch data")
+      }
+
+      const data = await response.json()
+      setResults(data.books || [])
+      setErrorMsg("")
+    } catch (error: any) {
+      console.error("Error fetching data:", error)
+      setErrorMsg(error.message || "Something went wrong")
+      setResults([])
+    } finally {
+      setIsLoading(false)
     }
-
-    const data = await response.json()
-    setResults(data.books || [])
-  } catch (error) {
-    console.error("Error fetching data:", error)
-    setResults([])
-  } finally {
-    setIsLoading(false)
   }
+
+// 📥 Download CSV
+const downloadCSV = () => {
+  if (results.length === 0) return
+
+  const headers = ["Year", "Author(s)/Contributors", "Title", "URL"]
+  const csvRows = [
+    headers,
+    ...results.map((book) => [
+      book.Year,
+      book["Author(s)/Contributors"],
+      book.Title,
+      book.URL,
+    ]),
+  ]
+
+  const csvContent = csvRows
+    .map((row) => row.map((val) => `"${val}"`).join(","))
+    .join("\n")
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+  const link = document.createElement("a")
+  link.href = URL.createObjectURL(blob)
+
+  // ✅ Use subject + year range in filename
+  const subjectSafe = searchParams.subject
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_]/g, "")
+  link.download = `${subjectSafe || "books"}_${searchParams.startYear}-${searchParams.endYear}.csv`
+
+  link.click()
 }
 
-
-  // 📥 Download CSV
-  const downloadCSV = () => {
-    if (results.length === 0) return
-
-    const headers = ["Year", "Authors/Contributors", "Title", "URL"]
-    const csvRows = [
-      headers,
-      ...results.map((book) => [
-        book.Year,
-        book["Author(s)/Contributors"],
-        book.Title,
-        book.URL,
-      ]),
-    ]
-
-    const csvContent = csvRows.map((row) =>
-      row.map((val) => `"${val}"`).join(",")
-    ).join("\n")
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    link.href = URL.createObjectURL(blob)
-    link.download = "books.csv"
-    link.click()
-  }
 
   return (
     <div className="container mx-auto p-6">
@@ -112,6 +120,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               />
               <div className="grid grid-cols-2 gap-4">
                 <Input
+                  type="number"
                   name="startYear"
                   placeholder="Start Year"
                   value={searchParams.startYear}
@@ -119,6 +128,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                   required
                 />
                 <Input
+                  type="number"
                   name="endYear"
                   placeholder="End Year"
                   value={searchParams.endYear}
@@ -127,6 +137,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 />
               </div>
               <Input
+                type="number"
                 name="globalLimit"
                 placeholder="Global Limit (e.g. 50)"
                 value={searchParams.globalLimit}
@@ -143,6 +154,11 @@ const handleSubmit = async (e: React.FormEvent) => {
                   "Scrape Books"
                 )}
               </Button>
+              {errorMsg && (
+                <p className="text-red-500 text-sm text-center mt-2">
+                  {errorMsg}
+                </p>
+              )}
             </form>
           </CardContent>
         </Card>
@@ -157,6 +173,12 @@ const handleSubmit = async (e: React.FormEvent) => {
         >
           {results.length > 0 ? (
             <div className="overflow-x-auto bg-white shadow-md rounded-lg">
+              <div className="p-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  Showing {results.length} result
+                  {results.length !== 1 && "s"}
+                </p>
+              </div>
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-100">
                   <tr>
@@ -164,7 +186,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                       Year
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
-                      Authors/Contributors
+                      Author(s)/Contributors
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
                       Title
