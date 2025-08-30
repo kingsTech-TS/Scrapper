@@ -4,6 +4,7 @@ import { ReactNode } from "react";
 import Navigation from "./Navigation";
 
 
+
 export default function LayoutClient({ children }: { children: ReactNode }) {
   return (
     <div className="relative min-h-screen">
